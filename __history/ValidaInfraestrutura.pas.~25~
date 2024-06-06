@@ -1,0 +1,391 @@
+unit ValidaInfraestrutura;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, System.Win.ComObj, Winapi.ActiveX,
+  Vcl.Mask, Vcl.ExtCtrls, Vcl.Imaging.pngimage, Vcl.ComCtrls, Winapi.IpHlpApi, Winapi.IpTypes,ShellAPI;
+
+type
+  TForm1 = class(TForm)
+    Button1: TButton;
+    Image1: TImage;
+    SaveDialog1: TSaveDialog;
+    Memo1: TRichEdit;
+    cb_relatorio: TCheckBox;
+    Timer1: TTimer;
+    lb_timer: TLabel;
+
+    procedure Button1Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure Timer1Timer(Sender: TObject);
+
+  private
+    { Private declarations }
+    procedure CreateTextFile;
+    //procedure GetNetworkInfo;
+
+  public
+    { Public declarations }
+    function nomeMaquina: string;
+    function versaoSistema: string;
+    function uuid: string;
+    function processador: string;
+    function memoria: string;
+    function disco: string;
+    //function GetNetworkInfo: string;
+  end;
+
+var
+  Form1: TForm1;
+
+implementation
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+Memo1.Clear;
+Image1.Stretch := True;
+  Image1.Proportional := True;
+  Image1.Center := True;
+Timer1.Enabled := True;
+end;
+
+procedure TForm1.Timer1Timer(Sender: TObject);
+begin
+  lb_timer.Caption := FormatDateTime('dd/MM/yyyy hh:mm:ss', Now);
+end;
+
+function TForm1.nomeMaquina: string;
+var
+maquina: string;
+begin
+  maquina := GetEnvironmentVariable('COMPUTERNAME');
+  Result := Format('Nome do Dispositivo: %s', [maquina]);
+end;
+
+function TForm1.versaoSistema: string;
+var
+  FSWbemLocator: OLEVariant;
+  FWMIService: OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject: OLEVariant;
+  oEnum: IEnumvariant;
+  iValue: LongWord;
+  nomeSO, sistema : string;
+begin
+  Result := 'Desconhecido';
+  try
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    FWMIService := FSWbemLocator.ConnectServer('.', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery('SELECT Caption FROM Win32_OperatingSystem', 'WQL', 0, null);
+    oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+    if oEnum.Next(1, FWbemObject, iValue) = 0 then
+    begin
+      nomeSO := FWbemObject.Caption;
+      sistema :=TOSVersion.ToString;
+      Result := Format('Sistema Operacional: %s' + sLineBreak+ 'Especificação do SO: %s',[nomeSO, sistema]);
+      FWbemObject := Unassigned;
+    end;
+  except
+    on E: Exception do
+      ShowMessage('Erro ao obter a versão do sistema operacional: ' + E.Message);
+  end;
+end;
+
+function TForm1.uuid: string;
+var
+  FSWbemLocator: OLEVariant;
+  FWMIService: OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject: OLEVariant;
+  oEnum: IEnumvariant;
+  iValue: LongWord;
+begin
+  Result := 'Desconhecido';
+  try
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    FWMIService := FSWbemLocator.ConnectServer('.', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery('SELECT UUID FROM Win32_ComputerSystemProduct', 'WQL', 0, null);
+    oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+    if oEnum.Next(1, FWbemObject, iValue) = 0 then
+    begin
+      Result := 'Número do UUID: ' + FWbemObject.UUID;
+      FWbemObject := Unassigned;
+    end;
+  except
+    on E: Exception do
+      ShowMessage('Erro ao obter o UUID do sistema operacional: ' + E.Message);
+  end;
+end;
+
+function TForm1.processador: string;
+var
+  FSWbemLocator: OLEVariant;
+  FWMIService: OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject: OLEVariant;
+  oEnum: IEnumvariant;
+  iValue: LongWord;
+  ProcessorName: string;
+  MaxClockSpeed: Integer;
+begin
+  Result := 'Desconhecido';
+  try
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    FWMIService := FSWbemLocator.ConnectServer('.', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery('SELECT Name, MaxClockSpeed FROM Win32_Processor', 'WQL', 0, null);
+    oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+    if oEnum.Next(1, FWbemObject, iValue) = 0 then
+    begin
+      ProcessorName := VarToStr(FWbemObject.Properties_.Item('Name').Value);
+      MaxClockSpeed := FWbemObject.Properties_.Item('MaxClockSpeed').Value;
+      Result := Format('INFORMAÇÕES DO PROCESSADOR' + sLineBreak + 'Modelo do Processador: %s' + sLineBreak + 'Velocidade do Processador: %d MHz',
+                       [ProcessorName, MaxClockSpeed]);
+      FWbemObject := Unassigned;
+    end;
+  except
+    on E: Exception do
+      ShowMessage('Erro ao obter informações do processador: ' + E.Message);
+  end;
+end;
+
+function memoriaTotal: Int64;
+var
+  FSWbemLocator: OLEVariant;
+  FWMIService: OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject: OLEVariant;
+  oEnum: IEnumvariant;
+  iValue: LongWord;
+begin
+  Result := 0;
+  try
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    FWMIService := FSWbemLocator.ConnectServer('.', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery('SELECT * FROM Win32_PhysicalMemory', 'WQL', 0, null);
+    oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+    while oEnum.Next(1, FWbemObject, iValue) = 0 do
+    begin
+      Result := Result + FWbemObject.Capacity;
+      FWbemObject := Unassigned;
+    end;
+  except
+    Result := 0;
+  end;
+end;
+
+function TForm1.memoria: string;
+var
+  FSWbemLocator: OLEVariant;
+  FWMIService: OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject: OLEVariant;
+  oEnum: IEnumvariant;
+  iValue: LongWord;
+  memoria: Int64;
+  modelo, fabricante: string;
+begin
+  Result := 'Desconhecido';
+  try
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    FWMIService := FSWbemLocator.ConnectServer('.', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery('SELECT * FROM Win32_ComputerSystem', 'WQL', 0, null);
+    oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+    if oEnum.Next(1, FWbemObject, iValue) = 0 then
+    begin
+      memoria := memoriaTotal;
+      modelo := VarToStr(FWbemObject.Model);
+      fabricante := VarToStr(FWbemObject.Manufacturer);
+      if SameText(modelo, 'To be filled by O.E.M.') then
+        modelo := 'Modelo não especificado pelo fabricante';
+      if SameText(fabricante, 'To be filled by O.E.M.') then
+        fabricante := 'Fabricante não especificado pelo fabricante';
+      Result := Format('INFORMAÇÕES DA MEMÓRIA'+  sLineBreak +'Memória: %d GB' + sLineBreak + 'Modelo: %s' + sLineBreak + 'Fabricante: %s',
+                        [memoria div (1024 * 1024 * 1024), modelo, fabricante]);
+
+      FWbemObject := Unassigned;
+    end;
+  except
+    on E: Exception do
+      ShowMessage('Erro ao obter informações da memória: ' + E.Message);
+  end;
+end;
+
+function memoriaEmUso: string;
+var
+  MemStatus: TMemoryStatusEx;
+  TotalPhys, AvailPhys: UInt64;
+  UsedPhys: UInt64;
+begin
+  MemStatus.dwLength := SizeOf(TMemoryStatusEx);
+  if GlobalMemoryStatusEx(MemStatus) then
+  begin
+    TotalPhys := MemStatus.ullTotalPhys;
+    AvailPhys := MemStatus.ullAvailPhys;
+    UsedPhys := TotalPhys - AvailPhys;
+    Result := Format('Memória Total: %.2f GB' + sLineBreak +
+                     'Memória Usada: %.2f GB' + sLineBreak +
+                     'Memória Livre: %.2f GB',
+                     [TotalPhys / (1024 * 1024 * 1024),
+                      UsedPhys / (1024 * 1024 * 1024),
+                      AvailPhys / (1024 * 1024 * 1024)]);
+  end
+  else
+    Result := 'Erro ao obter informações de memória';
+end;
+
+function TForm1.disco: string;
+var
+  FSWbemLocator: OLEVariant;
+  FWMIService: OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject: OLEVariant;
+  oEnum: IEnumvariant;
+  iValue: LongWord;
+  tamanho: Int64;
+  modelo, tipoInterface, numeroSerie, nameUnidade, nameVolume: string;
+  tamanhoTotal, espacoLivre, espacoUsado: Int64;
+begin
+  Result := 'Desconhecido';
+  try
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    FWMIService := FSWbemLocator.ConnectServer('.', 'root\CIMV2', '', '');
+    FWbemObjectSet := FWMIService.ExecQuery('SELECT * FROM Win32_DiskDrive', 'WQL', 0, null);
+    oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+    if oEnum.Next(1, FWbemObject, iValue) = 0 then
+    begin
+      tamanho := StrToInt64Def(FWbemObject.Size, -1);
+      modelo := VarToStr(FWbemObject.Model);
+      tipoInterface := VarToStr(FWbemObject.InterfaceType);
+      numeroSerie := VarToStr(FWbemObject.SerialNumber);
+      FWbemObject := Unassigned;
+      tamanhoTotal := 0;
+      espacoLivre := 0;
+      Memo1.Lines.Add('INFORMAÇÕES DE DISCO');
+      FWbemObjectSet := FWMIService.ExecQuery('SELECT * FROM Win32_LogicalDisk WHERE DriveType = 3', 'WQL', 0, null);
+      oEnum := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+      while oEnum.Next(1, FWbemObject, iValue) = 0 do
+      begin
+        tamanhoTotal := StrToInt64Def(FWbemObject.Size, 0);
+        espacoLivre := StrToInt64Def(FWbemObject.FreeSpace, 0);
+        nameVolume := FWbemObject.VolumeName;
+        nameUnidade := FWbemObject.DeviceId;
+        FWbemObject := Unassigned;
+        tamanhoTotal := tamanhoTotal div (1024 * 1024 * 1024);
+        espacoLivre := espacoLivre div (1024 * 1024 * 1024);
+        espacoUsado := tamanhoTotal - espacoLivre;
+        Memo1.Lines.Add('Disco: '+nameUnidade + ' - ' + nameVolume);
+        Memo1.Lines.Add('Tamanho: ' + IntToStr(tamanhoTotal) + ' GB');
+        Memo1.Lines.Add('Espaço Livre: ' + IntToStr(espacoLivre) + ' GB');
+        Memo1.Lines.Add('');
+      end;
+    end;
+    Result := Format('Modelo: %s' + sLineBreak + 'Tipo de Interface: %s' + sLineBreak + 'Número de Serie: %s',
+    [modelo, tipoInterface, numeroSerie]);
+  except
+    on E: Exception do
+      ShowMessage('Erro ao obter informações do Disco: ' + E.Message);
+  end;
+end;
+
+procedure TForm1.CreateTextFile;
+var
+  StreamWriter: TStreamWriter;
+begin
+  SaveDialog1.Filter := 'Text Files|*.txt|All Files|*.*';
+  SaveDialog1.DefaultExt := 'txt';
+  SaveDialog1.FileName := GetEnvironmentVariable('COMPUTERNAME')+'-ValidacaoInfraestrutura.txt';
+  if SaveDialog1.Execute then
+  begin
+    try
+      StreamWriter := TStreamWriter.Create(SaveDialog1.FileName, False, TEncoding.UTF8);
+      try
+
+      StreamWriter.WriteLine('###INFORMAÇÕES DA MÁQUINA###');
+      StreamWriter.WriteLine(nomeMaquina);
+      StreamWriter.WriteLine(versaoSistema);
+      StreamWriter.WriteLine(uuid);
+
+      StreamWriter.WriteLine('');
+      StreamWriter.WriteLine('###INFORMAÇÕES DO HARDWARE###');
+
+      StreamWriter.WriteLine(processador);
+      StreamWriter.WriteLine('');
+
+      StreamWriter.WriteLine(memoria);
+      StreamWriter.WriteLine('');
+
+      StreamWriter.WriteLine(memoriaEmUso);
+      StreamWriter.WriteLine('');
+
+      StreamWriter.WriteLine(disco);
+      StreamWriter.WriteLine('');
+
+
+      //StreamWriter.WriteLine(GetNetworkInfo);
+
+      StreamWriter.WriteLine(FormatDateTime('dddd, dd "de" mmmm "de" yyyy hh:mm:ss', Now));
+
+
+      finally
+        StreamWriter.Free;
+      end;
+      ShowMessage('Arquivo criado com sucesso em: ' + SaveDialog1.FileName);
+    except
+      on E: Exception do
+        ShowMessage('Um erro ocorreu:' + E.Message);
+    end;
+  end
+  else
+  begin
+    ShowMessage('Operação cancelada!');
+  end;
+end;
+
+
+ //Analisar melhor o IP Address
+//function TForm1.GetNetworkInfo;
+
+
+
+//Botao Iniciar
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+Memo1.Clear;
+Memo1.Lines.Add('###INFORMAÇÕES DA MÁQUINA###');
+Memo1.Lines.Add(nomeMaquina);
+Memo1.Lines.Add(versaoSistema);
+Memo1.Lines.Add(uuid);
+
+Memo1.Lines.Add('');
+Memo1.Lines.Add('###INFORMAÇÕES DO HARDWARE###');
+
+Memo1.Lines.Add(processador);
+Memo1.Lines.Add('');
+
+Memo1.Lines.Add(memoria);
+Memo1.Lines.Add('');
+
+Memo1.Lines.Add(memoriaEmUso);
+Memo1.Lines.Add('');
+
+Memo1.Lines.Add(disco);
+Memo1.Lines.Add('');
+
+
+//Memo1.Lines.Add(GetNetworkInfo);
+
+Memo1.Lines.Add(FormatDateTime('dddd, dd "de" mmmm "de" yyyy hh:mm:ss', Now));
+
+if cb_relatorio.Checked then
+begin
+CreateTextFile();
+end;
+
+end;
+
+
+{$R *.dfm}
+
+end.
