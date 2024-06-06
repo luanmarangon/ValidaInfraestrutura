@@ -3,8 +3,8 @@ object Form1: TForm1
   Top = 0
   BorderStyle = bsSizeToolWin
   Caption = 'FERRAMENTA PARA VALIDAR A INFRAESTRUTURA'
-  ClientHeight = 462
-  ClientWidth = 645
+  ClientHeight = 442
+  ClientWidth = 635
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -1003,7 +1003,7 @@ object Form1: TForm1
       'Memo1')
     ParentFont = False
     ScrollBars = ssBoth
-    TabOrder = 1
+    TabOrder = 2
   end
   object cb_relatorio: TCheckBox
     Left = 511
@@ -1025,7 +1025,7 @@ object Form1: TForm1
     ParentBiDiMode = False
     ParentFont = False
     State = cbChecked
-    TabOrder = 2
+    TabOrder = 1
   end
   object Timer1: TTimer
     OnTimer = Timer1Timer
